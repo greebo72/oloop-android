@@ -1,6 +1,0 @@
-{
-  "name": "oloop - Cross-Project Tracker",
-  "description": "Native Android & web client for oloop, a local cross-project tracker for open todos, questions, decisions, features and bugs using Markdown and YAML frontmatter.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
