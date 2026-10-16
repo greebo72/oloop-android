@@ -1,9 +1,5 @@
 plugins {
-    kotlin("jvm") version "2.4.10"
-}
-
-repositories {
-    mavenCentral()
+    kotlin("jvm")
 }
 
 dependencies {
@@ -15,6 +11,13 @@ dependencies {
 
 kotlin {
     jvmToolchain(21)
+    // The Android app uses this module, so keep the class files at a level Android tooling reads.
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks.test {

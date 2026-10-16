@@ -1,5 +1,19 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
 rootProject.name = "oloop-android"
 
-// The Android app module is added once the core module is done:
-// include(":app")
 include(":core")
+include(":app")
