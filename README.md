@@ -33,6 +33,21 @@ Status: `core` is done and tested against the spec fixtures. The `app` module ru
 
 ## The app
 
+Screens on a phone (light theme), from left to right: projects, tasks of one project, task detail, new task, new project, settings.
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/projects.png" alt="Project list" width="220"></td>
+    <td><img src="docs/screenshots/tasks.png" alt="Task list" width="220"></td>
+    <td><img src="docs/screenshots/detail.png" alt="Task detail" width="220"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dialog-task.png" alt="New task dialog" width="220"></td>
+    <td><img src="docs/screenshots/dialog-project.png" alt="New project dialog" width="220"></td>
+    <td><img src="docs/screenshots/settings.png" alt="Settings" width="220"></td>
+  </tr>
+</table>
+
 - **Folder:** you pick the data folder once in the settings. The app keeps access across restarts. It has no network permission.
 - **Screens:** project list, task list with the project name in the header, task detail. On wide screens (840 dp and up) all three show side by side, otherwise they stack with back navigation.
 - **Grouping:** none, creation date, modification date, type or status. Closed tasks are hidden unless you switch them on, then they get their own "Closed" section.
