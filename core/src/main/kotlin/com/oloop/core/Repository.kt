@@ -1,5 +1,9 @@
 package com.oloop.core
 
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+
 data class ProjectData(val project: Project, val tasks: List<Task>)
 
 /** A file that could not be read, shown to the user and never written to. */
@@ -24,9 +28,20 @@ sealed class ProjectCreateResult {
 /** Loads and saves projects and tasks in the oloop folder layout. */
 class OloopRepository(private val fs: OloopFileSystem) {
 
-    fun loadAll(): LoadResult {
+    fun loadAll(): LoadResult = loadAll(parallelism = 1)
+
+    /**
+     * [loadAll] with the task files read and parsed on [parallelism] threads.
+     *
+     * Over SAF every file read is a binder call, and a cloud provider adds network latency per
+     * file, so serial reads of many tasks dominate the load time. Listing and `project.md` stay
+     * serial: one query per folder, already cheap. Same results as the serial variant, same
+     * order, same unreadable reporting. `parallelism <= 1` never touches a thread pool.
+     */
+    fun loadAll(parallelism: Int): LoadResult {
         val projects = mutableListOf<ProjectData>()
         val unreadable = mutableListOf<Unreadable>()
+        val pending = mutableListOf<Pair<Project, List<Pair<String, String>>>>()
         for (folder in fs.listDirectories("")) {
             if (folder.startsWith(".")) continue
             val projectFile = "$folder/project.md"
@@ -37,17 +52,45 @@ class OloopRepository(private val fs: OloopFileSystem) {
                 unreadable += Unreadable(projectFile, e.message ?: e.toString())
                 continue
             }
-            val tasks = mutableListOf<Task>()
-            for (name in fs.listFiles("$folder/tasks")) {
-                if (!name.endsWith(".md") || name.startsWith(".")) continue
-                val path = "$folder/tasks/$name"
-                try {
-                    tasks += OloopParser.parseTask(fs.read(path), name, project.id)
-                } catch (e: Exception) {
-                    unreadable += Unreadable(path, e.message ?: e.toString())
+            val files = fs.listFiles("$folder/tasks")
+                .filter { it.endsWith(".md") && !it.startsWith(".") }
+                .map { "$folder/tasks/$it" to it }
+            pending += project to files
+        }
+        val workers = if (parallelism > 1) minOf(parallelism, pending.sumOf { it.second.size }) else 1
+        val pool = if (workers > 1) Executors.newFixedThreadPool(workers) else null
+        try {
+            val futures: List<List<Pair<String, Future<Result<Task>>>>>? = pool?.let { p ->
+                pending.map { (project, files) ->
+                    files.map { (path, name) ->
+                        path to p.submit(
+                            Callable<Result<Task>> {
+                                runCatching { OloopParser.parseTask(fs.read(path), name, project.id) }
+                            },
+                        )
+                    }
                 }
             }
-            projects += ProjectData(project, tasks)
+            pending.forEachIndexed { index, (project, files) ->
+                val tasks = mutableListOf<Task>()
+                if (futures == null) {
+                    for ((path, name) in files) {
+                        try {
+                            tasks += OloopParser.parseTask(fs.read(path), name, project.id)
+                        } catch (e: Exception) {
+                            unreadable += Unreadable(path, e.message ?: e.toString())
+                        }
+                    }
+                } else {
+                    for ((path, future) in futures[index]) {
+                        future.get().onSuccess { tasks += it }
+                            .onFailure { e -> unreadable += Unreadable(path, e.message ?: e.toString()) }
+                    }
+                }
+                projects += ProjectData(project, tasks)
+            }
+        } finally {
+            pool?.shutdown()
         }
         return LoadResult(projects.sortedBy { it.project.name.lowercase() }, unreadable)
     }

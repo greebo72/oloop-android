@@ -3,11 +3,15 @@ package com.oloop.app
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.oloop.core.CachingFileSystem
 import com.oloop.core.GroupingMode
+import com.oloop.core.JavaFileSystem
+import com.oloop.core.LoadResult
 import com.oloop.core.OloopRepository
 import com.oloop.core.ProjectCreateResult
 import com.oloop.core.ProjectData
 import com.oloop.core.SaveResult
+import com.oloop.core.hasUsableCache
 import com.oloop.core.Task
 import com.oloop.core.TaskOps
 import com.oloop.core.TaskStatus
@@ -64,29 +68,84 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
         reload()
     }
 
+    /**
+     * Local mirror of the data folder, keyed by the chosen root so a different folder never
+     * paints another folder's snapshot. The UI shows it instantly on cold start while the
+     * live load runs.
+     */
+    private fun cacheRoot(): java.nio.file.Path? =
+        settings.rootUri?.let {
+            getApplication<Application>().filesDir.toPath().resolve("oloop-cache-${it.toString().hashCode()}")
+        }
+
+    /**
+     * Builds the file stack: SAF wrapped in the cache mirror. Constructing it runs a binder
+     * call ([DocumentFile.fromTreeUri]), so callers do that on [Dispatchers.IO], never on the
+     * main thread.
+     */
+    private fun cachingFileSystem(): CachingFileSystem? =
+        settings.rootUri?.let { CachingFileSystem(SafFileSystem(getApplication(), it), cacheRoot() ?: return null) }
+
     private fun repository(): OloopRepository? =
-        settings.rootUri?.let { OloopRepository(SafFileSystem(getApplication(), it)) }
+        cachingFileSystem()?.let { OloopRepository(it) }
+
+    /**
+     * VM init and activity ON_RESUME (MainActivity) both fire a reload on a cold start. The
+     * second one is redundant and races the first over the shared cache mirror, so only one
+     * load runs at a time.
+     */
+    private var loadJob: kotlinx.coroutines.Job? = null
 
     fun reload() {
-        val repo = repository() ?: return
+        if (loadJob?.isActive == true) return
         _state.update { it.copy(loading = true) }
-        viewModelScope.launch(Dispatchers.IO) {
+        loadJob = viewModelScope.launch(Dispatchers.IO) {
+            // Snapshot first: building the SAF stack costs a binder call and must not delay
+            // the cached list reaching the screen.
+            paintSnapshot()
+            val fs = cachingFileSystem() ?: run { _state.update { it.copy(loading = false) }; return@launch }
+            fs.clearCache()
             try {
-                val result = repo.loadAll()
-                _state.update { s ->
-                    // Keep the selection only if it still exists.
-                    val project = result.projects.firstOrNull { it.project.id == s.selectedProjectId }
-                    s.copy(
-                        loading = false,
-                        projects = result.projects,
-                        unreadable = result.unreadable,
-                        selectedProjectId = project?.project?.id,
-                        selectedTaskId = project?.tasks?.firstOrNull { it.id == s.selectedTaskId }?.id,
-                    )
-                }
+                // Binder round-trips per file dominate over SAF and Drive; parse is CPU-cheap.
+                paint(OloopRepository(fs).loadAll(parallelism = 4))
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, banner = "Cannot read the folder: ${e.message}") }
             }
+        }
+    }
+
+    /** Paints the last successful load from the local mirror, before the live round-trip ends. */
+    private fun paintSnapshot() {
+        val cache = cacheRoot() ?: return
+        if (!hasUsableCache(cache)) return
+        val result = try {
+            OloopRepository(JavaFileSystem(cache)).loadAll()
+        } catch (e: Exception) {
+            return
+        }
+        if (result.projects.isEmpty()) return
+        _state.update { s ->
+            val project = result.projects.firstOrNull { it.project.id == s.selectedProjectId }
+            s.copy(
+                projects = result.projects,
+                unreadable = result.unreadable,
+                selectedProjectId = project?.project?.id,
+                selectedTaskId = project?.tasks?.firstOrNull { it.id == s.selectedTaskId }?.id,
+            )
+        }
+    }
+
+    private fun paint(result: LoadResult) {
+        _state.update { s ->
+            // Keep the selection only if it still exists.
+            val project = result.projects.firstOrNull { it.project.id == s.selectedProjectId }
+            s.copy(
+                loading = false,
+                projects = result.projects,
+                unreadable = result.unreadable,
+                selectedProjectId = project?.project?.id,
+                selectedTaskId = project?.tasks?.firstOrNull { it.id == s.selectedTaskId }?.id,
+            )
         }
     }
 
@@ -152,8 +211,8 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
 
     /** No [withActor]: project.md has no createdBy/updatedBy fields. */
     fun createProject(name: String) {
-        val repo = repository() ?: return
         viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository() ?: return@launch
             val result = try {
                 repo.createProject(name)
             } catch (e: Exception) {
@@ -224,8 +283,8 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
         force: Boolean = false,
         closeNewTaskDialog: Boolean = false,
     ) {
-        val repo = repository() ?: return
         viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository() ?: return@launch
             val result = try {
                 repo.saveTask(data.project, task, expectedUpdatedAt, force)
             } catch (e: Exception) {

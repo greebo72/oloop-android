@@ -57,6 +57,16 @@ Screens on a phone (light theme), from left to right: projects, tasks of one pro
 - **Not done yet:** showing the task image (the path is shown as text).
 - **Writes are not atomic.** The Storage Access Framework cannot replace a file by renaming, so an existing file is truncated and rewritten. The old content is copied to `.backup/` first.
 
+## Loading performance
+
+Over the Storage Access Framework every file access is a binder call, and a cloud-backed folder (Google Drive) answers some of them over the network, so a cold load of a few dozen tasks used to take seconds. Three changes fixed the felt load time:
+
+- **Local mirror** (`CachingFileSystem` in `core`): the app mirrors every file it reads or writes into a folder in private storage, keyed by the chosen data folder. On a cold start the last mirror is loaded from local disk and painted first — the list is on screen while the live load runs. The mirror is cleared and rewritten with every full refresh, so it is one consistent snapshot, not an accumulation of states.
+- **Parallel reads** (`loadAll(parallelism)` in `core`): listing folders and reading `project.md` stay serial, task files are read and parsed on four threads. Parsing is safe to parallelize because the YAML layer creates a fresh SnakeYAML instance per file.
+- **Single load per start:** both the view model init and the activity's resume want to reload; a guard lets only one run and keeps the two from racing over the mirror.
+
+Measured on a Samsung A53 (Android 16, debug build) with 5 projects and 30 tasks, content on screen after ~1 s (mirror) instead of ~7 s, live refresh over Google Drive done in ~2.2 s (parallel) vs ~7.2 s serial before. A benchmark with simulated 20 ms latency per read (`LoadBenchmarkTest` in `core`) shows the same ratio: 1580 ms serial, 476 ms parallel. One known quirk: right after picking a Drive folder the provider can answer "empty" for a few seconds while it warms up — that existed before and is not a caching bug; the next reload fixes the mirror.
+
 ## Design
 
 The UI follows a Material 3 spec: flat list rows with a tonal type icon, one filled primary element per screen at most, hierarchy from size and color instead of bold weight, a 4 dp spacing grid.
