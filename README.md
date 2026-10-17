@@ -18,6 +18,7 @@ Status: `core` is done and tested. The `app` module builds and starts, but folde
 - Reads `project.md` and `<project>/tasks/<id>.md`, checks them against the spec rules and refuses files with a newer `formatVersion`. Files it cannot read are reported, not hidden, and never written.
 - Writes task files in the same layout as the CLI. Timestamps are plain strings, so they never change.
 - `TaskOps` holds the rules: create, edit, close, reopen, comment. Every change needs an actor name and sets `updatedAt` and `updatedBy`.
+- `ProjectOps` creates projects: the folder slug follows the CLI's rules (NFKD, casefold, ASCII, `-` runs), including Python's ß→ss casefold. `OloopRepository.createProject` refuses duplicate names and existing folders, writes `project.md` and the empty `tasks/` folder the CLI's atomic writes need.
 - `OloopRepository.saveTask` re-reads the file first. If `updatedAt` on disk differs from what the caller loaded, nothing is written and a conflict is returned. Before an existing file is replaced, it is copied to `<project>/.backup/<id>.md.bak`.
 - `OloopFileSystem` is the only folder access `core` needs. `JavaFileSystem` implements it for tests and desktop use, the Android app will implement it with the Storage Access Framework.
 
@@ -27,9 +28,10 @@ Status: `core` is done and tested. The `app` module builds and starts, but folde
 - **Screens:** project list, task list with the project name in the header, task detail. On wide screens (840 dp and up) all three show side by side, otherwise they stack with back navigation.
 - **Grouping:** none, creation date, modification date, type or status. Closed tasks are hidden unless you switch them on.
 - **Editing:** title, description (Markdown) and labels in place with an explicit save, close and reopen, comments, new tasks. The app asks for your name before the first write.
+- **Projects:** new projects are created from the project list (plus button). The name is turned into the folder name with the same rules as the CLI, and the dialog shows that folder name before you confirm. `referencePath` and `referenceHost` stay empty: a phone has no repository path.
 - **Changes from elsewhere:** the app reloads when it comes back to the foreground. If a task changed on disk while you edited it, you choose between reloading and keeping your version.
 - **Files that cannot be read** are listed in a warning card and never written.
-- **Not done yet:** showing the task image (the path is shown as text), creating projects.
+- **Not done yet:** showing the task image (the path is shown as text).
 - **Writes are not atomic.** The Storage Access Framework cannot replace a file by renaming, so an existing file is truncated and rewritten. The old content is copied to `.backup/` first.
 
 ## Build and test

@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.oloop.core.GroupingMode
 import com.oloop.core.OloopRepository
+import com.oloop.core.ProjectCreateResult
 import com.oloop.core.ProjectData
 import com.oloop.core.SaveResult
 import com.oloop.core.Task
@@ -34,6 +35,7 @@ data class UiState(
     val grouping: GroupingMode = GroupingMode.NONE,
     val showSettings: Boolean = false,
     val showNewTask: Boolean = false,
+    val showNewProject: Boolean = false,
     val askActor: Boolean = false,
     val dirty: Boolean = false,
     val conflict: ConflictState? = null,
@@ -102,6 +104,7 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleClosed() = _state.update { it.copy(showClosed = !it.showClosed) }
     fun showSettings(show: Boolean) = _state.update { it.copy(showSettings = show) }
     fun showNewTask(show: Boolean) = _state.update { it.copy(showNewTask = show) }
+    fun showNewProject(show: Boolean) = _state.update { it.copy(showNewProject = show) }
     fun clearBanner() = _state.update { it.copy(banner = null) }
     fun dismissConflict() = _state.update { it.copy(conflict = null) }
 
@@ -139,6 +142,27 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- changes ---------------------------------------------------------
+
+    /** No [withActor]: project.md has no createdBy/updatedBy fields. */
+    fun createProject(name: String) {
+        val repo = repository() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = try {
+                repo.createProject(name)
+            } catch (e: Exception) {
+                ProjectCreateResult.Refused("write failed: ${e.message}")
+            }
+            when (result) {
+                is ProjectCreateResult.Created -> {
+                    _state.update { it.copy(showNewProject = false, banner = "Project created") }
+                    reload()
+                    selectProject(result.project.id)
+                }
+                // Dialog stays open so the user can fix the name.
+                is ProjectCreateResult.Refused -> _state.update { it.copy(banner = "Not created: ${result.reason}") }
+            }
+        }
+    }
 
     fun createTask(type: TaskType, title: String, description: String, labels: List<String>) {
         val data = _state.value.selectedProject ?: return

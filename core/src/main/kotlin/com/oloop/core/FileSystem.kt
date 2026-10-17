@@ -18,6 +18,8 @@ interface OloopFileSystem {
     fun read(path: String): String
     /** Creates missing directories. Replaces an existing file. */
     fun write(path: String, content: String)
+    /** Creates [path] and all missing parents. Needed for empty directories such as `tasks/`. */
+    fun createDirectory(path: String)
 }
 
 class JavaFileSystem(private val root: Path) : OloopFileSystem {
@@ -48,5 +50,9 @@ class JavaFileSystem(private val root: Path) : OloopFileSystem {
         } finally {
             Files.deleteIfExists(tmp)
         }
+    }
+
+    override fun createDirectory(path: String) {
+        Files.createDirectories(resolve(path))
     }
 }

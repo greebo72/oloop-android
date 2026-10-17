@@ -15,6 +15,12 @@ sealed class SaveResult {
     data class Refused(val reason: String) : SaveResult()
 }
 
+sealed class ProjectCreateResult {
+    data class Created(val project: Project) : ProjectCreateResult()
+    /** Nothing was written. */
+    data class Refused(val reason: String) : ProjectCreateResult()
+}
+
 /** Loads and saves projects and tasks in the oloop folder layout. */
 class OloopRepository(private val fs: OloopFileSystem) {
 
@@ -84,5 +90,46 @@ class OloopRepository(private val fs: OloopFileSystem) {
         }
         fs.write(path, text)
         return SaveResult.Saved
+    }
+
+    /**
+     * Creates `<slug>/project.md` and the empty `<slug>/tasks/` folder, same as the CLI's
+     * `project add`. Refuses when the name (case-insensitive) or the slug folder is already
+     * taken, and when a `project.md` cannot be read, because then the name cannot be checked.
+     * The `tasks/` folder is required: the CLI writes task files with a temp file in that
+     * folder, so `task add` breaks without it.
+     */
+    fun createProject(name: String): ProjectCreateResult {
+        val project = try {
+            ProjectOps.create(name)
+        } catch (e: FormatException) {
+            return ProjectCreateResult.Refused(e.message ?: "invalid name")
+        }
+        for (folder in fs.listDirectories("")) {
+            if (folder.startsWith(".")) continue
+            val file = "$folder/project.md"
+            if (!fs.exists(file)) continue
+            val existing = try {
+                OloopParser.parseProject(fs.read(file), folder)
+            } catch (e: FormatException) {
+                return ProjectCreateResult.Refused("$file cannot be read, so the name cannot be checked: ${e.message}")
+            }
+            if (existing.name.equals(project.name, ignoreCase = true)) {
+                return ProjectCreateResult.Refused("project already exists: ${project.name}")
+            }
+        }
+        if (fs.exists(project.folder)) {
+            return ProjectCreateResult.Refused("folder ${project.folder} already exists")
+        }
+        val text = OloopWriter.serializeProject(project)
+        // Never write something this library would refuse to read back.
+        try {
+            OloopParser.parseProject(text, project.folder)
+        } catch (e: FormatException) {
+            return ProjectCreateResult.Refused("project is invalid: ${e.message}")
+        }
+        fs.write("${project.folder}/project.md", text)
+        fs.createDirectory("${project.folder}/tasks")
+        return ProjectCreateResult.Created(project)
     }
 }

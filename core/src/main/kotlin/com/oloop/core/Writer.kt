@@ -2,6 +2,18 @@ package com.oloop.core
 
 /** Writes task files in the layout of the Python CLI: fixed key order, UTF-8, LF line endings. */
 object OloopWriter {
+    fun serializeProject(project: Project): String {
+        val sb = StringBuilder("---\n")
+        sb.append("formatVersion: ${project.formatVersion}\n")
+        sb.append("id: ${quote(project.id)}\n")
+        sb.append("name: ${quote(project.name)}\n")
+        sb.append("createdAt: ${quote(project.createdAt)}\n")
+        project.referencePath?.let { sb.append("referencePath: ${quote(it)}\n") }
+        project.referenceHost?.let { sb.append("referenceHost: ${quote(it)}\n") }
+        sb.append("---\n")
+        return sb.toString()
+    }
+
     fun serializeTask(task: Task): String {
         val sb = StringBuilder("---\n")
         sb.append("formatVersion: ${task.formatVersion}\n")

@@ -54,6 +54,13 @@ class SafFileSystem(private val context: Context, treeUri: Uri) : OloopFileSyste
         stream.use { it.write(content.toByteArray(Charsets.UTF_8)) }
     }
 
+    override fun createDirectory(path: String) {
+        var dir = root
+        for (name in segments(path)) {
+            dir = dir.findFile(name) ?: dir.createDirectory(name) ?: throw IOException("Cannot create folder $name")
+        }
+    }
+
     private fun createFile(dir: DocumentFile, name: String): DocumentFile {
         val created = dir.createFile("text/markdown", name) ?: throw IOException("Cannot create $name")
         // Some providers add or change an extension. The file name is part of the format.

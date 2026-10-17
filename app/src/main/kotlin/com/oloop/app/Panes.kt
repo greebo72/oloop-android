@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,39 +74,46 @@ fun PaneHeader(
 
 @Composable
 fun ProjectsPane(state: UiState, vm: OloopViewModel) {
-    Column(Modifier.fillMaxSize()) {
-        PaneHeader("oloop") {
-            IconButton(onClick = vm::reload) { Icon(Icons.Default.Refresh, contentDescription = "Reload") }
-            IconButton(onClick = { vm.showSettings(true) }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
-        }
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (state.unreadable.isNotEmpty()) {
-                item { UnreadableCard(state) }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            PaneHeader("oloop") {
+                IconButton(onClick = vm::reload) { Icon(Icons.Default.Refresh, contentDescription = "Reload") }
+                IconButton(onClick = { vm.showSettings(true) }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
             }
-            if (state.projects.isEmpty() && !state.loading) {
-                item { Text("No projects found in this folder.", style = MaterialTheme.typography.bodyMedium) }
-            }
-            items(state.projects, key = { it.project.id }) { data ->
-                val open = data.tasks.count { it.status == TaskStatus.OPEN }
-                val latest = data.tasks.maxOfOrNull { Grouping.instant(it.updatedAt) }
-                Card(
-                    Modifier.fillMaxWidth().clickable { vm.selectProject(data.project.id) },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (data.project.id == state.selectedProjectId)
-                            MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    ),
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(data.project.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "$open open of ${data.tasks.size}" +
-                                (latest?.let { " · updated ${Grouping.age(it.toString())} ago" } ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+            LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (state.unreadable.isNotEmpty()) {
+                    item { UnreadableCard(state) }
+                }
+                if (state.projects.isEmpty() && !state.loading) {
+                    item { Text("No projects found in this folder.", style = MaterialTheme.typography.bodyMedium) }
+                }
+                items(state.projects, key = { it.project.id }) { data ->
+                    val open = data.tasks.count { it.status == TaskStatus.OPEN }
+                    val latest = data.tasks.maxOfOrNull { Grouping.instant(it.updatedAt) }
+                    Card(
+                        Modifier.fillMaxWidth().clickable { vm.selectProject(data.project.id) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (data.project.id == state.selectedProjectId)
+                                MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(data.project.name, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "$open open of ${data.tasks.size}" +
+                                    (latest?.let { " · updated ${Grouping.age(it.toString())} ago" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
+                item { Spacer(Modifier.height(76.dp)) }
             }
         }
+        FloatingActionButton(
+            onClick = { vm.showNewProject(true) },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) { Icon(Icons.Default.Add, contentDescription = "New project") }
     }
 }
 

@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.oloop.core.ProjectOps
 import com.oloop.core.TaskOps
 import com.oloop.core.TaskType
 
@@ -29,6 +30,7 @@ import com.oloop.core.TaskType
 fun Dialogs(state: UiState, vm: OloopViewModel) {
     if (state.askActor) ActorDialog(onSave = vm::setActor, onCancel = vm::cancelActorPrompt)
     if (state.showNewTask) NewTaskDialog(vm)
+    if (state.showNewProject) NewProjectDialog(vm)
     state.conflict?.let { c ->
         AlertDialog(
             onDismissRequest = vm::dismissConflict,
@@ -65,6 +67,34 @@ private fun ActorDialog(onSave: (String) -> Unit, onCancel: () -> Unit) {
         },
         confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onSave(name) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun NewProjectDialog(vm: OloopViewModel) {
+    var name by remember { mutableStateOf("") }
+    val slug = remember(name) { runCatching { ProjectOps.slugify(name.trim()) }.getOrNull() }
+    AlertDialog(
+        onDismissRequest = { vm.showNewProject(false) },
+        title = { Text("New project") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text(
+                    when {
+                        name.isBlank() -> "The project gets its own folder in the data folder."
+                        slug == null -> "This name yields no valid folder name."
+                        else -> "Folder: $slug"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.typography.bodySmall.color,
+                )
+            }
+        },
+        confirmButton = {
+            Button(enabled = slug != null, onClick = { vm.createProject(name) }) { Text("Create") }
+        },
+        dismissButton = { TextButton(onClick = { vm.showNewProject(false) }) { Text("Cancel") } },
     )
 }
 
