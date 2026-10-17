@@ -46,6 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +67,7 @@ fun OloopTopBar(
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
     backIcon: @Composable (() -> Unit)? = null,
+    logo: Boolean = false,
     actions: @Composable () -> Unit = {},
 ) {
     Row(
@@ -76,6 +79,15 @@ fun OloopTopBar(
                 if (backIcon != null) backIcon()
                 else Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
+        } else if (logo) {
+            Image(
+                painter = painterResource(R.drawable.oloop_logo),
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(start = 12.dp, end = 8.dp)
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
         } else {
             Spacer(Modifier.width(12.dp))
         }
@@ -102,7 +114,7 @@ fun OloopTopBar(
 fun ProjectsPane(state: UiState, vm: OloopViewModel) {
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            OloopTopBar("oloop") {
+            OloopTopBar("oloop", logo = true) {
                 IconButton(onClick = vm::reload) { Icon(Icons.Filled.Refresh, contentDescription = "Reload") }
                 IconButton(onClick = { vm.showSettings(true) }) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
             }
