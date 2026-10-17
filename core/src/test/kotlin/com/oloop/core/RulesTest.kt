@@ -42,11 +42,11 @@ class RulesTest {
     fun editKeepsIdentityAndMovesUpdatedFields() {
         val (_, project, _) = repo()
         val t = newTask(project)
-        val e = TaskOps.edit(t, "New", "New body", listOf("x"), "bob", t1)
+        val e = TaskOps.edit(t, TaskType.FEATURE, "New", "New body", listOf("x"), "bob", t1)
         assertEquals(t.id, e.id)
         assertEquals(t.createdAt, e.createdAt)
         assertEquals(t.createdBy, e.createdBy)
-        assertEquals(t.type, e.type)
+        assertEquals(TaskType.FEATURE, e.type)
         assertEquals(t1, e.updatedAt)
         assertEquals("bob", e.updatedBy)
     }

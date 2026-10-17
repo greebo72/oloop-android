@@ -42,9 +42,10 @@ object TaskOps {
         )
     }
 
-    /** Edits title, description and labels. Id, type, createdAt, createdBy never change. */
+    /** Edits type, title, description and labels. Id, createdAt and createdBy never change. */
     fun edit(
         task: Task,
+        type: TaskType,
         title: String,
         description: String,
         labels: List<String>,
@@ -53,6 +54,7 @@ object TaskOps {
     ): Task {
         requireActor(actor)
         return task.copy(
+            type = type,
             title = title.trim(),
             description = description,
             labels = cleanLabels(labels),

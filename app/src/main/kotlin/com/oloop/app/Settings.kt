@@ -13,6 +13,11 @@ class Settings(private val context: Context) {
         get() = prefs.getString("actor", "") ?: ""
         set(value) = prefs.edit { putString("actor", value.trim()) }
 
+    /** Recently used task types, most recent first, as comma-joined enum names. */
+    var recentTypes: List<String>
+        get() = (prefs.getString("recent_types", "") ?: "").split(',').filter { it.isNotBlank() }
+        set(value) = prefs.edit { putString("recent_types", value.joinToString(",")) }
+
     val rootUri: Uri?
         get() = prefs.getString("root_uri", null)?.let(Uri::parse)
 

@@ -40,6 +40,7 @@ data class UiState(
     val dirty: Boolean = false,
     val conflict: ConflictState? = null,
     val banner: String? = null,
+    val recentTypes: List<TaskType> = listOf(TaskType.TODO, TaskType.QUESTION),
 ) {
     val selectedProject: ProjectData? get() = projects.firstOrNull { it.project.id == selectedProjectId }
     val selectedTask: Task? get() = selectedProject?.tasks?.firstOrNull { it.id == selectedTaskId }
@@ -47,7 +48,13 @@ data class UiState(
 
 class OloopViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = Settings(app)
-    private val _state = MutableStateFlow(UiState(rootSelected = settings.rootUri != null, actor = settings.actor))
+    private val _state = MutableStateFlow(
+        UiState(
+            rootSelected = settings.rootUri != null,
+            actor = settings.actor,
+            recentTypes = settings.recentTypes.mapNotNull(TaskType::fromValue).ifEmpty { listOf(TaskType.TODO, TaskType.QUESTION) },
+        ),
+    )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     /** What the user wanted to do when we had to ask for a name first. */
@@ -167,16 +174,25 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
     fun createTask(type: TaskType, title: String, description: String, labels: List<String>) {
         val data = _state.value.selectedProject ?: return
         withActor { actor ->
+            rememberTypeUsed(type)
             val task = TaskOps.create(data.project, type, title, description, labels, actor)
             save(data, task, expectedUpdatedAt = null, closeNewTaskDialog = true)
         }
     }
 
-    fun saveEdits(task: Task, title: String, description: String, labels: List<String>) {
+    fun saveEdits(task: Task, type: TaskType, title: String, description: String, labels: List<String>) {
         val data = _state.value.selectedProject ?: return
         withActor { actor ->
-            save(data, TaskOps.edit(task, title, description, labels, actor), task.updatedAt)
+            rememberTypeUsed(type)
+            save(data, TaskOps.edit(task, type, title, description, labels, actor), task.updatedAt)
         }
+    }
+
+    /** Moves [type] to the front of the recent-types list and persists it. */
+    private fun rememberTypeUsed(type: TaskType) {
+        val recents = (listOf(type) + _state.value.recentTypes.filter { it != type }).take(6)
+        settings.recentTypes = recents.map { it.value }
+        _state.update { it.copy(recentTypes = recents) }
     }
 
     fun setStatus(task: Task, status: TaskStatus) {
