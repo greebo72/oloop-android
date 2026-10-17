@@ -1,5 +1,4 @@
-<img src="store/play_store_512.png" alt="oloop app icon" width="96" height="96" align="center">
-
+<img src="store/play_store_512.png" alt="oloop app icon" width="96" height="96" align="left">
 Android client for [oloop](https://github.com/greebo72/oloop-spec), a local cross-project tracker for todos, questions, decisions, features and bugs. It reads and writes the same Markdown files with YAML frontmatter as the [oloop CLI](https://github.com/greebo72/oloop-cli).
 
 <br clear="all">
