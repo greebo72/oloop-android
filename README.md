@@ -98,3 +98,7 @@ OLOOP_READ_ROOT=/path/to/data ./gradlew :core:test --tests '*ManualChecks*'
 ## History
 
 The first version was generated with Google AI Studio. It stored tasks in the wrong folder and could not read projects with reference fields, so it was replaced. It is still available at commit `5e9af62`.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
