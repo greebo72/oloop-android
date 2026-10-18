@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.oloop.app"
+    namespace = "io.github.greebo72.oloop.app"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.oloop.app"
+        applicationId = "io.github.greebo72.oloop.app"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
