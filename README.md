@@ -81,7 +81,7 @@ The UI follows a Material 3 spec: flat list rows with a tonal type icon, one fil
 You need JDK 21. The Gradle wrapper downloads Gradle itself. The app also needs the Android SDK (platform 37 and build tools), which Android Studio installs. Put its location in `local.properties` as `sdk.dir=/path/to/sdk`, Android Studio does that for you.
 
 ```
-git clone --recurse-submodules git@github.com:greebo72/oloop-android.git
+git clone --recurse-submodules https://github.com/greebo72/oloop-android.git
 cd oloop-android
 ./gradlew :core:test           # parser, rules and conformance fixtures
 ./gradlew :app:assembleDebug   # builds app/build/outputs/apk/debug/app-debug.apk
