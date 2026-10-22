@@ -1,6 +1,7 @@
 package io.github.greebo72.oloop.app
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.greebo72.oloop.core.CachingFileSystem
@@ -51,6 +52,9 @@ data class UiState(
     val selectedProject: ProjectData? get() = projects.firstOrNull { it.project.id == selectedProjectId }
     val selectedTask: Task? get() = selectedProject?.tasks?.firstOrNull { it.id == selectedTaskId }
 }
+
+/** Log tag of the app. Errors the user sees as a banner are logged under it, with the exception. */
+private const val TAG = "oloop"
 
 class OloopViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = Settings(app)
@@ -111,6 +115,7 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
                 // Binder round-trips per file dominate over SAF and Drive; parse is CPU-cheap.
                 paint(OloopRepository(fs).loadAll(parallelism = 4))
             } catch (e: Exception) {
+                Log.w(TAG, "Reading the data folder failed", e)
                 _state.update { it.copy(loading = false, banner = "Cannot read the folder: ${e.message}") }
             }
         }
@@ -219,6 +224,7 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
             val result = try {
                 repo.createProject(name)
             } catch (e: Exception) {
+                Log.w(TAG, "Creating project failed", e)
                 ProjectCreateResult.Refused("write failed: ${e.message}")
             }
             when (result) {
@@ -291,6 +297,8 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
             val result = try {
                 repo.saveTask(data.project, task, expectedUpdatedAt, force)
             } catch (e: Exception) {
+                // The banner shows the message; the log keeps the whole exception for a later look.
+                Log.w(TAG, "Saving task ${task.id} failed", e)
                 SaveResult.Refused("write failed: ${e.message}")
             }
             when (result) {
@@ -308,7 +316,10 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
                 is SaveResult.Conflict -> _state.update {
                     it.copy(conflict = ConflictState(data.project.id, task, expectedUpdatedAt ?: "", result.diskTask))
                 }
-                is SaveResult.Refused -> _state.update { it.copy(banner = "Not saved: ${result.reason}") }
+                is SaveResult.Refused -> {
+                    Log.w(TAG, "Task ${task.id} not saved: ${result.reason}")
+                    _state.update { it.copy(banner = "Not saved: ${result.reason}") }
+                }
             }
         }
     }

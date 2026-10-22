@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
+import io.github.greebo72.oloop.core.FileTypes
 import io.github.greebo72.oloop.core.JavaFileSystem
 import io.github.greebo72.oloop.core.OloopFileSystem
 import java.io.IOException
@@ -159,7 +160,7 @@ class SafFileSystem(private val context: Context, private val treeUri: Uri) : Ol
     }
 
     private fun createFile(dir: DocumentFile, name: String): DocumentFile {
-        val created = dir.createFile("text/markdown", name) ?: throw IOException("Cannot create $name")
+        val created = dir.createFile(FileTypes.mimeTypeFor(name), name) ?: throw IOException("Cannot create $name")
         // Some providers add or change an extension. The file name is part of the format.
         if (created.name != name && !created.renameTo(name)) {
             created.delete()
