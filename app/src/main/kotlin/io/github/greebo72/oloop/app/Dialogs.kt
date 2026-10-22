@@ -125,6 +125,7 @@ private fun NewTaskDialog(vm: OloopViewModel) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var labels by remember { mutableStateOf(listOf<String>()) }
+    var dueDate by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     OloopDialog(onDismiss = { vm.showNewTask(false) }) {
         Text("New task", style = MaterialTheme.typography.headlineSmall)
@@ -151,11 +152,12 @@ private fun NewTaskDialog(vm: OloopViewModel) {
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+        DueDateField(dueDate, { dueDate = it }, modifier = Modifier.fillMaxWidth(), fill = MaterialTheme.colorScheme.surface)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = { vm.showNewTask(false) }) { Text("Cancel") }
             TextButton(
                 enabled = title.isNotBlank(),
-                onClick = { vm.createTask(type, title, description, TaskOps.cleanLabels(labels)) },
+                onClick = { vm.createTask(type, title, description, TaskOps.cleanLabels(labels), dueDate) },
             ) { Text("Create") }
         }
     }

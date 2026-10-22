@@ -32,12 +32,16 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Help
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,6 +60,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import io.github.greebo72.oloop.core.DueDates
 import io.github.greebo72.oloop.core.TaskOps
 import io.github.greebo72.oloop.core.TaskType
 
@@ -90,12 +95,14 @@ fun TonalField(
     focused: Boolean,
     modifier: Modifier = Modifier,
     fill: Color = MaterialTheme.colorScheme.surfaceContainer,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier
             .clip(RoundedCornerShape(10.dp))
             .background(fill)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Text(
@@ -104,6 +111,67 @@ fun TonalField(
             color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         content()
+    }
+}
+
+/** The "overdue" badge: an open task whose due date has passed. Error container, so it reads in dark mode too. */
+@Composable
+fun OverdueBadge(modifier: Modifier = Modifier, text: String = "overdue") {
+    Box(
+        modifier
+            .height(24.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+    }
+}
+
+/**
+ * Due date field: shows the date in the format of the device and opens the native Material 3 date
+ * picker. The dialog has Clear next to Cancel and OK, because the picker itself cannot empty the date.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DueDateField(
+    dueDate: String?,
+    onChange: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+    fill: Color = MaterialTheme.colorScheme.surfaceContainer,
+) {
+    var open by remember { mutableStateOf(false) }
+    TonalField("Due date", open, modifier, fill, onClick = { open = true }) {
+        val shown = DueDates.display(dueDate)
+        Text(
+            shown ?: "No due date",
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (shown == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.heightIn(min = 24.dp),
+        )
+    }
+    if (open) {
+        // The picker works in milliseconds at midnight UTC: the date goes in and comes out as UTC.
+        val state = rememberDatePickerState(initialSelectedDateMillis = DueDates.toPickerMillis(dueDate))
+        DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(
+                    enabled = state.selectedDateMillis != null,
+                    onClick = {
+                        state.selectedDateMillis?.let { onChange(DueDates.fromPickerMillis(it)) }
+                        open = false
+                    },
+                ) { Text("OK") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(enabled = dueDate != null, onClick = { onChange(null); open = false }) { Text("Clear") }
+                    TextButton(onClick = { open = false }) { Text("Cancel") }
+                }
+            },
+        ) { DatePicker(state = state) }
     }
 }
 

@@ -36,6 +36,8 @@ data class UiState(
     val selectedProjectId: String? = null,
     val selectedTaskId: String? = null,
     val showClosed: Boolean = false,
+    /** Only the overdue tasks of the open project. Reset when another project is opened. */
+    val onlyOverdue: Boolean = false,
     val grouping: GroupingMode = GroupingMode.NONE,
     val showSettings: Boolean = false,
     val showNewTask: Boolean = false,
@@ -158,7 +160,7 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectProject(id: String?) {
-        if (leaveAllowed()) _state.update { it.copy(selectedProjectId = id, selectedTaskId = null) }
+        if (leaveAllowed()) _state.update { it.copy(selectedProjectId = id, selectedTaskId = null, onlyOverdue = false) }
     }
 
     fun selectTask(id: String?) {
@@ -167,6 +169,7 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDirty(dirty: Boolean) = _state.update { it.copy(dirty = dirty) }
     fun setGrouping(mode: GroupingMode) = _state.update { it.copy(grouping = mode) }
+    fun toggleOverdue() = _state.update { it.copy(onlyOverdue = !it.onlyOverdue) }
     fun toggleClosed() = _state.update { it.copy(showClosed = !it.showClosed) }
     fun showSettings(show: Boolean) = _state.update { it.copy(showSettings = show) }
     fun showNewTask(show: Boolean) = _state.update { it.copy(showNewTask = show) }
@@ -230,20 +233,20 @@ class OloopViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun createTask(type: TaskType, title: String, description: String, labels: List<String>) {
+    fun createTask(type: TaskType, title: String, description: String, labels: List<String>, dueDate: String? = null) {
         val data = _state.value.selectedProject ?: return
         withActor { actor ->
             rememberTypeUsed(type)
-            val task = TaskOps.create(data.project, type, title, description, labels, actor)
+            val task = TaskOps.create(data.project, type, title, description, labels, actor, dueDate = dueDate)
             save(data, task, expectedUpdatedAt = null, closeNewTaskDialog = true)
         }
     }
 
-    fun saveEdits(task: Task, type: TaskType, title: String, description: String, labels: List<String>) {
+    fun saveEdits(task: Task, type: TaskType, title: String, description: String, labels: List<String>, dueDate: String?) {
         val data = _state.value.selectedProject ?: return
         withActor { actor ->
             rememberTypeUsed(type)
-            save(data, TaskOps.edit(task, type, title, description, labels, actor), task.updatedAt)
+            save(data, TaskOps.edit(task, type, title, description, labels, actor, dueDate = dueDate), task.updatedAt)
         }
     }
 

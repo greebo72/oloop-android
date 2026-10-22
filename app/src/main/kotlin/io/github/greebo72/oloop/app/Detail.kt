@@ -56,6 +56,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.core.MarkwonTheme
+import io.github.greebo72.oloop.core.DueDates
 import io.github.greebo72.oloop.core.Task
 import io.github.greebo72.oloop.core.TaskOps
 import io.github.greebo72.oloop.core.TaskStatus
@@ -82,11 +83,12 @@ private fun TaskDetail(task: Task, projectName: String, vm: OloopViewModel, onBa
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description) }
     var labels by remember { mutableStateOf(task.labels) }
+    var dueDate by remember { mutableStateOf(task.dueDate) }
     var commentDraft by remember { mutableStateOf("") }
 
     val dirty = editing && (
         type != task.type || title != task.title || description != task.description ||
-            TaskOps.cleanLabels(labels) != task.labels
+            TaskOps.cleanLabels(labels) != task.labels || dueDate != task.dueDate
         )
     LaunchedEffect(dirty) { vm.setDirty(dirty) }
 
@@ -100,13 +102,14 @@ private fun TaskDetail(task: Task, projectName: String, vm: OloopViewModel, onBa
                 IconButton(onClick = {
                     editing = false
                     type = task.type; title = task.title; description = task.description; labels = task.labels
+                    dueDate = task.dueDate
                 }) { Icon(Icons.Filled.Close, contentDescription = "Cancel") }
                 Text("Edit task", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 Button(
                     enabled = dirty && title.isNotBlank(),
                     shape = RoundedCornerShape(20.dp),
                     onClick = {
-                        vm.saveEdits(task, type, title, description, labels)
+                        vm.saveEdits(task, type, title, description, labels, dueDate)
                         editing = false
                     },
                 ) { Text("Save") }
@@ -134,6 +137,7 @@ private fun TaskDetail(task: Task, projectName: String, vm: OloopViewModel, onBa
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
+                DueDateField(dueDate, { dueDate = it }, modifier = Modifier.fillMaxWidth())
                 Column {
                     TonalTextField(
                         description, { description = it }, "Description",
@@ -258,6 +262,21 @@ private fun TaskDetail(task: Task, projectName: String, vm: OloopViewModel, onBa
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(top = 12.dp),
                 )
+                // Due date, with the badge for an open task that is late.
+                DueDates.display(task.dueDate)?.let { shown ->
+                    Row(
+                        Modifier.padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            "Due $shown",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (DueDates.isOverdue(task)) OverdueBadge()
+                    }
+                }
                 // 3. Labels as outlined chips.
                 if (task.labels.isNotEmpty()) {
                     FlowRow(

@@ -22,8 +22,10 @@ object TaskOps {
         actor: String,
         now: String = nowUtc(),
         id: String = UUID.randomUUID().toString(),
+        dueDate: String? = null,
     ): Task {
         requireActor(actor)
+        dueDate?.let { DueDates.require(it) }
         return Task(
             formatVersion = FORMAT_VERSION,
             id = id,
@@ -39,10 +41,14 @@ object TaskOps {
             updatedBy = actor,
             comments = emptyList(),
             description = description,
+            dueDate = dueDate,
         )
     }
 
-    /** Edits type, title, description and labels. Id, createdAt and createdBy never change. */
+    /**
+     * Edits type, title, description, labels and the due date. Id, createdAt and createdBy never change.
+     * [dueDate] is the new date, null removes it. Left out, the date stays as it is.
+     */
     fun edit(
         task: Task,
         type: TaskType,
@@ -51,13 +57,16 @@ object TaskOps {
         labels: List<String>,
         actor: String,
         now: String = nowUtc(),
+        dueDate: String? = task.dueDate,
     ): Task {
         requireActor(actor)
+        dueDate?.let { DueDates.require(it) }
         return task.copy(
             type = type,
             title = title.trim(),
             description = description,
             labels = cleanLabels(labels),
+            dueDate = dueDate,
             updatedAt = now,
             updatedBy = actor,
         )

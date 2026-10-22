@@ -6,6 +6,8 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.time.temporal.WeekFields
+import java.util.Locale
 
 enum class GroupingMode(val label: String) {
     NONE("None"),
@@ -13,6 +15,7 @@ enum class GroupingMode(val label: String) {
     MODIFICATION_DATE("Modification date"),
     TASK_TYPE("Task type"),
     TASK_STATUS("Task status"),
+    DUE_DATE("Due date"),
 }
 
 data class TaskGroup(val title: String?, val tasks: List<Task>)
@@ -31,6 +34,7 @@ object Grouping {
         mode: GroupingMode,
         now: Instant = Instant.now(),
         zone: ZoneId = ZoneId.systemDefault(),
+        locale: Locale = Locale.getDefault(),
     ): List<TaskGroup> {
         val sorted = tasks.sortedByDescending { instant(it.updatedAt) }
         return when (mode) {
@@ -41,11 +45,36 @@ object Grouping {
                 sorted.filter { it.type == type }.takeIf { it.isNotEmpty() }
                     ?.let { TaskGroup(type.value.replaceFirstChar(Char::uppercase), it) }
             }
+            GroupingMode.DUE_DATE -> byDueDate(sorted, LocalDate.ofInstant(now, zone), locale)
             GroupingMode.TASK_STATUS -> listOf(
                 TaskGroup("Open", sorted.filter { it.status == TaskStatus.OPEN }),
                 TaskGroup("Closed", sorted.filter { it.status == TaskStatus.CLOSED }),
             ).filter { it.tasks.isNotEmpty() }
         }
+    }
+
+    private val dueBuckets = listOf("Overdue", "Today", "This week", "Later", "Earlier", "No due date")
+
+    /**
+     * Groups by due date: overdue, today, rest of this calendar week (first day of the week of
+     * [locale]), later, and tasks without a date last. Inside a group the earliest date comes first.
+     * A closed task with a past date is never overdue, it goes to "Earlier".
+     */
+    private fun byDueDate(sorted: List<Task>, today: LocalDate, locale: Locale): List<TaskGroup> {
+        val endOfWeek = today.with(WeekFields.of(locale).dayOfWeek(), 7)
+        val byBucket = sorted
+            .sortedBy { DueDates.parse(it.dueDate) ?: LocalDate.MAX }
+            .groupBy {
+                val date = DueDates.parse(it.dueDate)
+                when {
+                    date == null -> "No due date"
+                    date.isBefore(today) -> if (it.status == TaskStatus.OPEN) "Overdue" else "Earlier"
+                    date == today -> "Today"
+                    !date.isAfter(endOfWeek) -> "This week"
+                    else -> "Later"
+                }
+            }
+        return dueBuckets.mapNotNull { name -> byBucket[name]?.let { TaskGroup(name, it) } }
     }
 
     private fun byDate(

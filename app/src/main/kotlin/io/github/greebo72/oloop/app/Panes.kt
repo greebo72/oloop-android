@@ -21,20 +21,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,11 +50,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.greebo72.oloop.core.DueDates
 import io.github.greebo72.oloop.core.Grouping
 import io.github.greebo72.oloop.core.GroupingMode
 import io.github.greebo72.oloop.core.Task
@@ -141,6 +147,7 @@ fun ProjectsPane(state: UiState, vm: OloopViewModel) {
                         name = data.project.name,
                         updated = latest?.let { "Updated ${formatAge(it.toString())}" } ?: "No tasks yet",
                         counts = "$open / ${data.tasks.size} open",
+                        overdue = DueDates.overdueCount(data.tasks),
                         onClick = { vm.selectProject(data.project.id) },
                     )
                 }
@@ -152,7 +159,7 @@ fun ProjectsPane(state: UiState, vm: OloopViewModel) {
 
 /** Flat project row: 40 dp folder icon on primaryContainer, name, updated, open count. */
 @Composable
-private fun ProjectRow(name: String, updated: String, counts: String, onClick: () -> Unit) {
+private fun ProjectRow(name: String, updated: String, counts: String, overdue: Int, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -183,7 +190,11 @@ private fun ProjectRow(name: String, updated: String, counts: String, onClick: (
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(counts, style = MaterialTheme.typography.labelMedium)
+        Column(horizontalAlignment = Alignment.End) {
+            Text(counts, style = MaterialTheme.typography.labelMedium)
+            // Where something is late, the project says so without being opened.
+            if (overdue > 0) OverdueBadge(Modifier.padding(top = 4.dp), text = "$overdue overdue")
+        }
     }
 }
 
@@ -223,56 +234,76 @@ fun TasksPane(state: UiState, vm: OloopViewModel, showBack: Boolean) {
         return
     }
     val openCount = data.tasks.count { it.status == TaskStatus.OPEN }
-    val visible = data.tasks.filter { state.showClosed || it.status == TaskStatus.OPEN }
+    val overdueCount = DueDates.overdueCount(data.tasks)
+    val visible = data.tasks.filter {
+        (state.showClosed || it.status == TaskStatus.OPEN) && (!state.onlyOverdue || DueDates.isOverdue(it))
+    }
     val grouped = state.grouping != GroupingMode.NONE
     var menuOpen by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
+            // The three filters sit in the top bar, right of the project name: icons only, 52 dp each.
             OloopTopBar(
                 title = data.project.name,
                 subtitle = "$openCount open",
                 onBack = if (showBack) ({ vm.selectProject(null) }) else null,
             ) {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Filled.FilterList, contentDescription = "Grouping")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Only offered where something is overdue, or while it is on, so it can be turned off.
+                if (overdueCount > 0 || state.onlyOverdue) {
+                    FilterButton(checked = state.onlyOverdue, onCheckedChange = { vm.toggleOverdue() }) {
+                        // The number says how many; the badge sits on the icon.
+                        BadgedBox(badge = { Badge { Text("$overdueCount") } }) {
+                            Icon(
+                                Icons.Outlined.EventBusy,
+                                contentDescription = "Only overdue tasks ($overdueCount)",
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
+                    }
                 }
-            }
-            // Filter row: Show closed chip + Group chip, single line, no divider below.
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FilterChip(
-                    selected = state.showClosed,
-                    onClick = vm::toggleClosed,
-                    leadingIcon = if (state.showClosed) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                    } else {
-                        { Icon(Icons.Filled.Visibility, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                    },
-                    label = { Text("Show closed") },
-                )
-                Box {
-                    AssistChip(
-                        onClick = { menuOpen = true },
-                        label = { Text("Group: ${state.grouping.label}", maxLines = 1) },
-                        trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null) },
+                FilterButton(checked = state.showClosed, onCheckedChange = { vm.toggleClosed() }) {
+                    Icon(
+                        if (state.showClosed) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircle,
+                        contentDescription = if (state.showClosed) "Hide closed tasks" else "Show closed tasks",
+                        modifier = Modifier.size(28.dp),
                     )
+                }
+                Box {
+                    FilterButton(checked = state.grouping != GroupingMode.NONE, onCheckedChange = { menuOpen = true }) {
+                        Icon(
+                            Icons.Filled.FilterList,
+                            contentDescription = "Group: ${state.grouping.label}",
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         GroupingMode.entries.forEach { mode ->
                             DropdownMenuItem(
                                 text = { Text(mode.label) },
+                                trailingIcon = if (mode == state.grouping) {
+                                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                                } else {
+                                    null
+                                },
                                 onClick = { vm.setGrouping(mode); menuOpen = false },
                             )
                         }
                     }
                 }
+                }
+                Spacer(Modifier.width(8.dp))
             }
             Spacer(Modifier.height(8.dp))
             if (visible.isEmpty()) {
-                Placeholder(if (data.tasks.isEmpty()) "No tasks yet" else "No open tasks")
+                Placeholder(
+                    when {
+                        data.tasks.isEmpty() -> "No tasks yet"
+                        state.onlyOverdue -> "No overdue tasks"
+                        else -> "No open tasks"
+                    },
+                )
             } else LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
                 if (grouped) {
                     Grouping.group(visible, state.grouping).forEach { group ->
@@ -301,6 +332,26 @@ fun TasksPane(state: UiState, vm: OloopViewModel, showBack: Boolean) {
             NewFab("New task", Modifier.align(Alignment.BottomEnd).padding(16.dp)) { vm.showNewTask(true) }
         }
     }
+}
+
+/**
+ * A 52 dp icon toggle for the filters in the top bar: primary container when on, plain when off.
+ * The colors are the ones of the app's own containers, so the icon reads on them in dark mode too.
+ */
+@Composable
+private fun FilterButton(checked: Boolean, onCheckedChange: (Boolean) -> Unit, content: @Composable () -> Unit) {
+    FilledTonalIconToggleButton(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        modifier = Modifier.size(52.dp),
+        colors = IconButtonDefaults.filledTonalIconToggleButtonColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+        content = content,
+    )
 }
 
 @Composable
@@ -388,6 +439,22 @@ private fun TaskRow(task: Task, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // The due date on its own line, so it does not push the labels out of the meta line.
+            // A closed task shows its date but is never overdue.
+            DueDates.display(task.dueDate)?.let { shown ->
+                Row(
+                    Modifier.padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (DueDates.isOverdue(task)) OverdueBadge()
+                    Text(
+                        shown,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isClosed) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Spacer(Modifier.width(16.dp))
         Text(
