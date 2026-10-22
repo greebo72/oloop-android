@@ -6,3 +6,8 @@ local.properties
 .DS_Store
 captures/
 .cxx/
+
+# Signing keys and the file with their passwords never go into the repository
+*.jks
+*.keystore
+keystore.properties

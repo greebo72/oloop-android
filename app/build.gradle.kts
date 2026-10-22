@@ -1,7 +1,32 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// The release signing key. It is never in the repository. The values come from the environment
+// (the release workflow) or from keystore.properties in the project root (a local release build,
+// the file is ignored by Git):
+//
+//   storeFile=/path/to/oloop-release.jks
+//   storePassword=...
+//   keyAlias=oloop
+//   keyPassword=...        (the same as storePassword for a PKCS12 keystore)
+//
+// Without all four values the release build is not signed, and the debug build is unaffected.
+val keystoreProperties = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+}
+
+fun signingValue(env: String, key: String): String? =
+    System.getenv(env)?.takeIf { it.isNotBlank() } ?: keystoreProperties.getProperty(key)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = signingValue("OLOOP_KEYSTORE_FILE", "storeFile")
+val releaseStorePassword = signingValue("OLOOP_KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = signingValue("OLOOP_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = signingValue("OLOOP_KEY_PASSWORD", "keyPassword")
+val canSignRelease = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { it != null }
 
 android {
     namespace = "io.github.greebo72.oloop.app"
@@ -15,9 +40,21 @@ android {
         versionName = "0.5.0"
     }
 
+    signingConfigs {
+        if (canSignRelease) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (canSignRelease) signingConfig = signingConfigs.getByName("release")
         }
     }
 

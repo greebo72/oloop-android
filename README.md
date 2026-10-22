@@ -95,6 +95,34 @@ To check a real data folder without writing to it:
 OLOOP_READ_ROOT=/path/to/data ./gradlew :core:test --tests '*ManualChecks*'
 ```
 
+## Release
+
+A release is a tag. Push `v0.5.0` and the workflow `release.yml` builds the signed APK and attaches `oloop-0.5.0-android.apk` to the GitHub release. The tag has to match `versionName` in `app/build.gradle.kts`, the workflow stops if it does not. Raise `versionCode` with every release, Android only installs a higher one over an installed app.
+
+The APK is signed with a release key that is not in the repository. Keep the keystore and its password safe: without that key no update can be installed over an existing installation. The workflow reads four repository secrets (*Settings, Secrets and variables, Actions*):
+
+| Secret | Content |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the keystore file, `base64 -i oloop-release.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | the password of the keystore |
+| `ANDROID_KEY_ALIAS` | the alias of the key |
+| `ANDROID_KEY_PASSWORD` | the password of the key, the same one for a PKCS12 keystore |
+
+A release build on your own machine reads the same values from `keystore.properties` in the project root (ignored by Git):
+
+```
+storeFile=/path/to/oloop-release.jks
+storePassword=...
+keyAlias=oloop
+keyPassword=...
+```
+
+```
+./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release.apk
+```
+
+Without these values the release build is not signed (`app-release-unsigned.apk`) and cannot be installed. The debug build does not need them.
+
 ## History
 
 The first version was generated with Google AI Studio. It stored tasks in the wrong folder and could not read projects with reference fields, so it was replaced. It is still available at commit `5e9af62`.

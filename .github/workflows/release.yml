@@ -1,0 +1,105 @@
+name: release
+
+# Builds the signed release APK and puts it into a GitHub release.
+#
+# The trigger is a tag: push v0.5.0 and the pipeline builds the APK and creates the release "v0.5.0"
+# with it. The tag has to match versionName in app/build.gradle.kts, so the APK and the release cannot
+# disagree. The APK is signed with the release key from the repository secrets:
+#
+#   ANDROID_KEYSTORE_BASE64    the keystore file, base64 (base64 -i oloop-release.jks)
+#   ANDROID_KEYSTORE_PASSWORD  its password
+#   ANDROID_KEY_ALIAS          the alias of the key (oloop)
+#   ANDROID_KEY_PASSWORD       the password of the key (the same one for a PKCS12 keystore)
+#
+# A manual run builds and uploads the APK as a workflow artifact only. The release is only created for a tag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Check the tag against the version of the app
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME but versionName is $version. Change one of them."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Restore the signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::The secret ANDROID_KEYSTORE_BASE64 is not set. An unsigned APK cannot be installed."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/oloop-release.jks"
+          echo "OLOOP_KEYSTORE_FILE=$RUNNER_TEMP/oloop-release.jks" >> "$GITHUB_ENV"
+
+      - name: Test and build the release APK
+        env:
+          OLOOP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          OLOOP_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          OLOOP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :core:test :app:assembleRelease
+
+      - name: Name the APK and check its signature
+        run: |
+          version="${VERSION:-$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)}"
+          apk="oloop-${version}-android.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          # Fails the build when the APK is not signed or the signature is broken. The
+          # fingerprint is printed so it can be compared with the one of the key.
+          "$apksigner" verify --print-certs "$apk"
+          echo "APK=$apk" >> "$GITHUB_ENV"
+
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/oloop-release.jks"
+
+      - name: Keep the APK as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oloop-android
+          path: ${{ env.APK }}
+          if-no-files-found: error
+
+      - name: Create the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # A release that exists already is updated, not duplicated. The workflow can be run
+          # again for the same tag.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+            echo "Release $TAG updated."
+          else
+            gh release create "$TAG" "$APK" \
+              --target "${{ github.sha }}" \
+              --title "oloop $TAG" \
+              --generate-notes
+            echo "Release $TAG created."
+          fi
