@@ -1,5 +1,6 @@
 package io.github.greebo72.oloop.core
 
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 
@@ -16,9 +17,11 @@ object OloopParser {
     private val projectKeys = setOf("formatVersion", "id", "name", "createdAt", "referencePath", "referenceHost")
     private val projectRequired = listOf("id", "name", "createdAt")
     private val taskKeys = setOf(
-        "formatVersion", "id", "projectId", "type", "title", "status", "imagePath", "labels",
+        "formatVersion", "id", "projectId", "type", "title", "status", "imagePath", "dueDate", "labels",
         "createdAt", "createdBy", "updatedAt", "updatedBy", "comments",
     )
+    private val commentKeys = setOf("body", "createdAt")
+    private val datePattern = Regex("^\\d{4}-\\d{2}-\\d{2}$")
     private val taskRequired = listOf(
         "id", "projectId", "type", "title", "status", "createdAt", "createdBy", "updatedAt",
         "updatedBy", "labels",
@@ -27,7 +30,7 @@ object OloopParser {
     fun parseProject(text: String, folder: String): Project {
         val (data, _) = Frontmatter.split(text)
         checkFormatVersion(data)
-        checkKeys(data, projectKeys, projectRequired)
+        checkRequired(data, projectRequired)
         return Project(
             formatVersion = formatVersion(data),
             id = uuid(data, "id"),
@@ -36,13 +39,14 @@ object OloopParser {
             referencePath = optionalString(data, "referencePath", 1),
             referenceHost = optionalString(data, "referenceHost", 1),
             folder = folder,
+            extraFields = extraFields(data, projectKeys),
         )
     }
 
     fun parseTask(text: String, fileName: String, expectedProjectId: String? = null): Task {
         val (data, body) = Frontmatter.split(text)
         checkFormatVersion(data)
-        checkKeys(data, taskKeys, taskRequired)
+        checkRequired(data, taskRequired)
         val id = uuid(data, "id")
         val projectId = uuid(data, "projectId")
         val typeText = string(data, "type", 1, Int.MAX_VALUE)
@@ -64,6 +68,8 @@ object OloopParser {
             updatedBy = string(data, "updatedBy", 1, Int.MAX_VALUE),
             comments = comments(data),
             description = body,
+            dueDate = dueDate(data),
+            extraFields = extraFields(data, taskKeys),
         )
         if (fileName != "$id.md") throw FormatException("id $id != file name $fileName")
         if (expectedProjectId != null && projectId != expectedProjectId) {
@@ -91,9 +97,31 @@ object OloopParser {
 
     // ---- field helpers --------------------------------------------------
 
-    private fun checkKeys(data: Map<String, Any?>, allowed: Set<String>, required: List<String>) {
+    private fun checkRequired(data: Map<String, Any?>, required: List<String>) {
         for (key in required) if (!data.containsKey(key)) throw FormatException("$key: required property missing")
-        for (key in data.keys) if (key !in allowed) throw FormatException("$key: unknown property")
+    }
+
+    /**
+     * The fields that are not part of the format, in file order. They are accepted and not checked:
+     * a newer client may add fields without a formatVersion bump (SPEC.md, "Unknown fields").
+     */
+    private fun extraFields(data: Map<*, *>, known: Set<String>): ExtraFields {
+        val extra = LinkedHashMap<String, Any?>()
+        for ((key, value) in data) if (key is String && key !in known) extra[key] = value
+        return extra
+    }
+
+    /** `dueDate` is absent, null or a real calendar day written `YYYY-MM-DD`. */
+    private fun dueDate(data: Map<String, Any?>): String? {
+        val value = data["dueDate"] ?: return null
+        val text = value as? String ?: throw FormatException("dueDate: must be a date (YYYY-MM-DD) or null")
+        if (!datePattern.matches(text)) throw FormatException("dueDate: not a date (YYYY-MM-DD): '$text'")
+        try {
+            LocalDate.parse(text)
+        } catch (e: DateTimeParseException) {
+            throw FormatException("dueDate: not a date (YYYY-MM-DD): '$text'")
+        }
+        return text
     }
 
     private fun string(data: Map<String, Any?>, key: String, min: Int, max: Int): String {
@@ -144,10 +172,10 @@ object OloopParser {
         val raw = data["comments"] as? List<*> ?: throw FormatException("comments: must be a list")
         return raw.mapIndexed { i, item ->
             val map = item as? Map<*, *> ?: throw FormatException("comments/$i: must be a mapping")
-            for (k in map.keys) if (k != "body" && k != "createdAt") throw FormatException("comments/$i/$k: unknown property")
+            if (!map.containsKey("body")) throw FormatException("comments/$i/body: required property missing")
             val body = map["body"] as? String ?: throw FormatException("comments/$i/body: must be a string")
             if (body.isEmpty()) throw FormatException("comments/$i/body: must not be empty")
-            Comment(body, checkTimestamp(map["createdAt"], "comments/$i/createdAt"))
+            Comment(body, checkTimestamp(map["createdAt"], "comments/$i/createdAt"), extraFields(map, commentKeys))
         }
     }
 }

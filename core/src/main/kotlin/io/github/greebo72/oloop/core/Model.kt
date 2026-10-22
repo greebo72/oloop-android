@@ -24,7 +24,18 @@ enum class TaskStatus(val value: String) {
     }
 }
 
-data class Comment(val body: String, val createdAt: String)
+/**
+ * Frontmatter fields this client does not know, in the order of the file. They are written back
+ * unchanged, so an older client never erases a field a newer one added (SPEC.md, "Unknown fields").
+ * The values are what the YAML parser produced: strings, numbers, booleans, null, lists, maps.
+ */
+typealias ExtraFields = Map<String, Any?>
+
+data class Comment(
+    val body: String,
+    val createdAt: String,
+    val extraFields: ExtraFields = emptyMap(),
+)
 
 /** A project. [folder] is the directory name below the data root, it is not stored in the file. */
 data class Project(
@@ -35,6 +46,7 @@ data class Project(
     val referencePath: String? = null,
     val referenceHost: String? = null,
     val folder: String,
+    val extraFields: ExtraFields = emptyMap(),
 )
 
 data class Task(
@@ -53,6 +65,12 @@ data class Task(
     val comments: List<Comment>,
     /** Markdown body of the file. */
     val description: String,
+    /**
+     * The calendar date the task should be done by, `YYYY-MM-DD`, no time and no time zone. Null when
+     * there is none: the field is absent or null in the file. It does not depend on [status].
+     */
+    val dueDate: String? = null,
+    val extraFields: ExtraFields = emptyMap(),
 )
 
 /** A file that violates the oloop format. The message names the field or rule. */

@@ -181,13 +181,13 @@ class RulesTest {
     }
 
     @Test
-    fun unknownKeysAndEmptyCommentsAreRefused() {
+    fun emptyCommentsAreRefusedButUnknownKeysAreNot() {
         val project = "11111111-1111-4111-8111-111111111111"
         val head = "---\nid: 33333333-3333-4333-8333-333333333333\nprojectId: $project\ntype: todo\ntitle: t\nstatus: open\n" +
             "labels: []\ncreatedAt: 2026-03-01T08:00:00Z\ncreatedBy: a\nupdatedAt: 2026-03-01T08:00:00Z\nupdatedBy: a\n"
         val name = "33333333-3333-4333-8333-333333333333.md"
-        val unknown = assertFailsWith<FormatException> { OloopParser.parseTask(head + "extra: 1\n---\n", name) }
-        assertTrue("extra" in unknown.message!!)
+        // Unknown fields are accepted and kept, they are no error (SPEC.md, "Unknown fields").
+        assertEquals(mapOf("extra" to 1), OloopParser.parseTask(head + "extra: 1\n---\n", name).extraFields)
         val empty = assertFailsWith<FormatException> {
             OloopParser.parseTask(head + "comments:\n- body: \"\"\n  createdAt: 2026-03-01T08:00:00Z\n---\n", name)
         }
